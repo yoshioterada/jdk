@@ -385,7 +385,7 @@ public class SSLSocketTemplate {
     /*
      * Create an instance of SSLContext with the specified trust/key materials.
      */
-    public static SSLContext createSSLContext(
+    public static SSLContext    createSSLContext(
             Cert[] trustedCerts,
             Cert[] endEntityCerts,
             ContextParameters params) throws Exception {
