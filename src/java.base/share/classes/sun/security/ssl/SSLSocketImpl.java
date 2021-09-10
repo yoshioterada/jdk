@@ -159,6 +159,29 @@ public final class SSLSocketImpl
     }
 
     /**
+     * Constructs an SSL connection to a named host at a specified
+     * port, using the authentication context provided.
+     *
+     * This endpoint acts as the client, and may rejoin an existing SSL session
+     * if appropriate.
+     */
+    SSLSocketImpl(SSLContextImpl sslContext, String peerHost,
+                  int peerPort, SSLConfiguration sslConfiguration) throws IOException {
+        super();
+        this.sslContext = sslContext;
+        HandshakeHash handshakeHash = new HandshakeHash();
+        this.conContext = new TransportContext(sslContext, this,
+                sslConfiguration,
+                new SSLSocketInputRecord(handshakeHash),
+                new SSLSocketOutputRecord(handshakeHash));
+        this.peerHost = peerHost;
+        SocketAddress socketAddress =
+                peerHost != null ? new InetSocketAddress(peerHost, peerPort) :
+                        new InetSocketAddress(InetAddress.getByName(null), peerPort);
+        connect(socketAddress, 0);
+    }
+
+    /**
      * Constructs an SSL connection to a server at a specified
      * address, and TCP port, using the authentication context
      * provided.
@@ -174,6 +197,29 @@ public final class SSLSocketImpl
         this.conContext = new TransportContext(sslContext, this,
                 new SSLSocketInputRecord(handshakeHash),
                 new SSLSocketOutputRecord(handshakeHash), true);
+
+        SocketAddress socketAddress = new InetSocketAddress(address, peerPort);
+        connect(socketAddress, 0);
+    }
+
+    /**
+     * Constructs an SSL connection to a server at a specified
+     * address, and TCP port, using the authentication context
+     * provided.
+     *
+     * This endpoint acts as the client, and may rejoin an existing SSL
+     * session if appropriate.
+     */
+    SSLSocketImpl(SSLContextImpl sslContext,
+                  InetAddress address, int peerPort,
+                  SSLConfiguration configuration) throws IOException {
+        super();
+        this.sslContext = sslContext;
+        HandshakeHash handshakeHash = new HandshakeHash();
+        this.conContext = new TransportContext(sslContext, this,
+                configuration,
+                new SSLSocketInputRecord(handshakeHash),
+                new SSLSocketOutputRecord(handshakeHash));
 
         SocketAddress socketAddress = new InetSocketAddress(address, peerPort);
         connect(socketAddress, 0);
@@ -205,6 +251,33 @@ public final class SSLSocketImpl
     }
 
     /**
+     * Constructs an SSL connection to a named host at a specified
+     * port, using the authentication context provided.
+     *
+     * This endpoint acts as the client, and may rejoin an existing SSL
+     * session if appropriate.
+     */
+    SSLSocketImpl(SSLContextImpl sslContext,
+                  String peerHost, int peerPort, InetAddress localAddr,
+                  int localPort,
+                  SSLConfiguration configuration) throws IOException {
+        super();
+        this.sslContext = sslContext;
+        HandshakeHash handshakeHash = new HandshakeHash();
+        this.conContext = new TransportContext(sslContext, this,
+                configuration,
+                new SSLSocketInputRecord(handshakeHash),
+                new SSLSocketOutputRecord(handshakeHash));
+        this.peerHost = peerHost;
+
+        bind(new InetSocketAddress(localAddr, localPort));
+        SocketAddress socketAddress =
+                peerHost != null ? new InetSocketAddress(peerHost, peerPort) :
+                        new InetSocketAddress(InetAddress.getByName(null), peerPort);
+        connect(socketAddress, 0);
+    }
+
+    /**
      * Constructs an SSL connection to a server at a specified
      * address, and TCP port, using the authentication context
      * provided.
@@ -221,6 +294,31 @@ public final class SSLSocketImpl
         this.conContext = new TransportContext(sslContext, this,
                 new SSLSocketInputRecord(handshakeHash),
                 new SSLSocketOutputRecord(handshakeHash), true);
+
+        bind(new InetSocketAddress(localAddr, localPort));
+        SocketAddress socketAddress = new InetSocketAddress(peerAddr, peerPort);
+        connect(socketAddress, 0);
+    }
+
+    /**
+     * Constructs an SSL connection to a server at a specified
+     * address, and TCP port, using the authentication context
+     * provided.
+     *
+     * This endpoint acts as the client, and may rejoin an existing SSL
+     * session if appropriate.
+     */
+    SSLSocketImpl(SSLContextImpl sslContext,
+                  InetAddress peerAddr, int peerPort,
+                  InetAddress localAddr, int localPort,
+                  SSLConfiguration configuration) throws IOException {
+        super();
+        this.sslContext = sslContext;
+        HandshakeHash handshakeHash = new HandshakeHash();
+        this.conContext = new TransportContext(sslContext, this,
+                configuration,
+                new SSLSocketInputRecord(handshakeHash),
+                new SSLSocketOutputRecord(handshakeHash));
 
         bind(new InetSocketAddress(localAddr, localPort));
         SocketAddress socketAddress = new InetSocketAddress(peerAddr, peerPort);
@@ -283,6 +381,41 @@ public final class SSLSocketImpl
         doneConnect();
     }
 
+    /**
+     * Layer SSL traffic over an existing connection, rather than
+     * creating a new connection.
+     *
+     * The existing connection may be used only for SSL traffic (using this
+     * SSLSocket) until the SSLSocket.close() call returns. However, if a
+     * protocol error is detected, that existing connection is automatically
+     * closed.
+     * <p>
+     * This particular constructor always uses the socket in the
+     * role of an SSL client. It may be useful in cases which start
+     * using SSL after some initial data transfers, for example in some
+     * SSL tunneling applications or as part of some kinds of application
+     * protocols which negotiate use of a SSL based security.
+     */
+    SSLSocketImpl(SSLContextImpl sslContext, Socket sock,
+                  String peerHost, int port, boolean autoClose,
+                  SSLConfiguration configuration) throws IOException {
+        super(sock);
+        // We always layer over a connected socket
+        if (!sock.isConnected()) {
+            throw new SocketException("Underlying socket is not connected");
+        }
+
+        this.sslContext = sslContext;
+        HandshakeHash handshakeHash = new HandshakeHash();
+        this.conContext = new TransportContext(sslContext, this,
+                configuration,
+                new SSLSocketInputRecord(handshakeHash),
+                new SSLSocketOutputRecord(handshakeHash));
+        this.peerHost = peerHost;
+        this.autoClose = autoClose;
+        doneConnect();
+    }
+
     @Override
     public void connect(SocketAddress endpoint,
             int timeout) throws IOException {
@@ -310,7 +443,7 @@ public final class SSLSocketImpl
         socketLock.lock();
         try {
             return CipherSuite.namesOf(
-                    conContext.sslConfig.enabledCipherSuites);
+                    conContext.sslConfig.getEnabledCipherSuites());
         } finally {
             socketLock.unlock();
         }
@@ -320,8 +453,8 @@ public final class SSLSocketImpl
     public void setEnabledCipherSuites(String[] suites) {
         socketLock.lock();
         try {
-            conContext.sslConfig.enabledCipherSuites =
-                    CipherSuite.validValuesOf(suites);
+            conContext.sslConfig.setEnabledCipherSuites(
+                    CipherSuite.validValuesOf(suites));
         } finally {
             socketLock.unlock();
         }
@@ -338,7 +471,7 @@ public final class SSLSocketImpl
         socketLock.lock();
         try {
             return ProtocolVersion.toStringArray(
-                    conContext.sslConfig.enabledProtocols);
+                    conContext.sslConfig.getEnabledProtocols());
         } finally {
             socketLock.unlock();
         }
@@ -352,8 +485,8 @@ public final class SSLSocketImpl
 
         socketLock.lock();
         try {
-            conContext.sslConfig.enabledProtocols =
-                    ProtocolVersion.namesOf(protocols);
+            conContext.sslConfig.setEnabledProtocols(
+                    ProtocolVersion.namesOf(protocols));
         } finally {
             socketLock.unlock();
         }

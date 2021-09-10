@@ -25,15 +25,8 @@
 
 package sun.security.ssl;
 
-import java.security.AccessControlContext;
-import java.security.AccessController;
-import java.security.AlgorithmConstraints;
-import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
+import java.security.*;
+import java.util.*;
 import java.util.function.BiFunction;
 import javax.crypto.KeyGenerator;
 import javax.net.ssl.HandshakeCompletedListener;
@@ -47,14 +40,16 @@ import sun.security.action.GetPropertyAction;
 import sun.security.ssl.SSLExtension.ClientExtensions;
 import sun.security.ssl.SSLExtension.ServerExtensions;
 
+import static sun.security.ssl.NamedGroup.NamedGroupSpec.NAMED_GROUP_NONE;
+
 /**
  * SSL/(D)TLS configuration.
  */
 final class SSLConfiguration implements Cloneable {
     // configurations with SSLParameters
     AlgorithmConstraints        userSpecifiedAlgorithmConstraints;
-    List<ProtocolVersion>       enabledProtocols;
-    List<CipherSuite>           enabledCipherSuites;
+    private List<ProtocolVersion>       enabledProtocols;
+    private List<CipherSuite>           enabledCipherSuites;
     ClientAuthType              clientAuthType;
     String                      identificationProtocol;
     List<SNIServerName>         serverNames;
@@ -63,6 +58,9 @@ final class SSLConfiguration implements Cloneable {
     boolean                     preferLocalCipherSuites;
     boolean                     enableRetransmissions;
     int                         maximumPacketSize;
+    List<ProtocolVersion>       activeProtocols;
+    List<CipherSuite>           activeCipherSuites;
+    AlgorithmConstraints        algorithmConstraints;
 
     // The configured signature schemes for "signature_algorithms" and
     // "signature_algorithms_cert" extensions
@@ -166,6 +164,13 @@ final class SSLConfiguration implements Cloneable {
         this.handshakeListeners = null;
         this.noSniExtension = false;
         this.noSniMatcher = false;
+
+        this.algorithmConstraints = new SSLAlgorithmConstraints(
+                this.userSpecifiedAlgorithmConstraints);
+        this.activeProtocols = getActiveProtocols(this.enabledProtocols,
+                this.enabledCipherSuites, this.algorithmConstraints);
+        this.activeCipherSuites = getActiveCipherSuites(this.activeProtocols,
+                this.enabledCipherSuites, this.algorithmConstraints);
     }
 
     SSLParameters getSSLParameters() {
@@ -264,6 +269,13 @@ final class SSLConfiguration implements Cloneable {
         this.preferLocalCipherSuites = params.getUseCipherSuitesOrder();
         this.enableRetransmissions = params.getEnableRetransmissions();
         this.maximumPacketSize = params.getMaximumPacketSize();
+
+        this.algorithmConstraints = new SSLAlgorithmConstraints(
+                this.userSpecifiedAlgorithmConstraints);
+        this.activeProtocols = getActiveProtocols(this.enabledProtocols,
+                this.enabledCipherSuites, this.algorithmConstraints);
+        this.activeCipherSuites = getActiveCipherSuites(this.activeProtocols,
+                this.enabledCipherSuites, this.algorithmConstraints);
     }
 
     // SSLSocket only
@@ -496,4 +508,171 @@ final class SSLConfiguration implements Cloneable {
 
         return Collections.emptyList();
     }
+
+    private static List<ProtocolVersion> getActiveProtocols(
+            List<ProtocolVersion> enabledProtocols,
+            List<CipherSuite> enabledCipherSuites,
+            AlgorithmConstraints algorithmConstraints) {
+        boolean enabledSSL20Hello = false;
+        ArrayList<ProtocolVersion> protocols = new ArrayList<>(4);
+        for (ProtocolVersion protocol : enabledProtocols) {
+            if (!enabledSSL20Hello && protocol == ProtocolVersion.SSL20Hello) {
+                enabledSSL20Hello = true;
+                continue;
+            }
+
+            if (!algorithmConstraints.permits(
+                    EnumSet.of(CryptoPrimitive.KEY_AGREEMENT),
+                    protocol.name, null)) {
+                // Ignore disabled protocol.
+                continue;
+            }
+
+            boolean found = false;
+            Map<NamedGroup.NamedGroupSpec, Boolean> cachedStatus =
+                    new EnumMap<>(NamedGroup.NamedGroupSpec.class);
+            for (CipherSuite suite : enabledCipherSuites) {
+                if (suite.isAvailable() && suite.supports(protocol)) {
+                    if (isActivatable(suite,
+                            algorithmConstraints, cachedStatus)) {
+                        protocols.add(protocol);
+                        found = true;
+                        break;
+                    }
+                } else if (SSLLogger.isOn && SSLLogger.isOn("verbose")) {
+                    SSLLogger.fine(
+                            "Ignore unsupported cipher suite: " + suite +
+                                    " for " + protocol.name);
+                }
+            }
+
+            if (!found && (SSLLogger.isOn) && SSLLogger.isOn("handshake")) {
+                SSLLogger.fine(
+                        "No available cipher suite for " + protocol.name);
+            }
+        }
+
+        if (!protocols.isEmpty()) {
+            if (enabledSSL20Hello) {
+                protocols.add(ProtocolVersion.SSL20Hello);
+            }
+            Collections.sort(protocols);
+        }
+
+        return Collections.unmodifiableList(protocols);
+    }
+
+    private static List<CipherSuite> getActiveCipherSuites(
+            List<ProtocolVersion> enabledProtocols,
+            List<CipherSuite> enabledCipherSuites,
+            AlgorithmConstraints algorithmConstraints) {
+
+        List<CipherSuite> suites = new LinkedList<>();
+        if (enabledProtocols != null && !enabledProtocols.isEmpty()) {
+            Map<NamedGroup.NamedGroupSpec, Boolean> cachedStatus =
+                    new EnumMap<>(NamedGroup.NamedGroupSpec.class);
+            for (CipherSuite suite : enabledCipherSuites) {
+                if (!suite.isAvailable()) {
+                    continue;
+                }
+
+                boolean isSupported = false;
+                for (ProtocolVersion protocol : enabledProtocols) {
+                    if (!suite.supports(protocol)) {
+                        continue;
+                    }
+                    if (isActivatable(suite,
+                            algorithmConstraints, cachedStatus)) {
+                        suites.add(suite);
+                        isSupported = true;
+                        break;
+                    }
+                }
+
+                if (!isSupported &&
+                        SSLLogger.isOn && SSLLogger.isOn("verbose")) {
+                    SSLLogger.finest(
+                            "Ignore unsupported cipher suite: " + suite);
+                }
+            }
+        }
+
+        return Collections.unmodifiableList(suites);
+    }
+
+    private static boolean isActivatable(CipherSuite suite,
+                                         AlgorithmConstraints algorithmConstraints,
+                                         Map<NamedGroup.NamedGroupSpec, Boolean> cachedStatus) {
+
+        if (algorithmConstraints.permits(
+                EnumSet.of(CryptoPrimitive.KEY_AGREEMENT), suite.name, null)) {
+            if (suite.keyExchange == null) {
+                // TLS 1.3, no definition of key exchange in cipher suite.
+                return true;
+            }
+
+            // Is at least one of the group types available?
+            boolean groupAvailable, retval = false;
+            NamedGroup.NamedGroupSpec[] groupTypes = suite.keyExchange.groupTypes;
+            for (NamedGroup.NamedGroupSpec groupType : groupTypes) {
+                if (groupType != NAMED_GROUP_NONE) {
+                    Boolean checkedStatus = cachedStatus.get(groupType);
+                    if (checkedStatus == null) {
+                        groupAvailable = SupportedGroupsExtension.SupportedGroups.isActivatable(
+                                algorithmConstraints, groupType);
+                        cachedStatus.put(groupType, groupAvailable);
+
+                        if (!groupAvailable &&
+                                SSLLogger.isOn && SSLLogger.isOn("verbose")) {
+                            SSLLogger.fine(
+                                    "No activated named group in " + groupType);
+                        }
+                    } else {
+                        groupAvailable = checkedStatus;
+                    }
+
+                    retval |= groupAvailable;
+                } else {
+                    retval = true;
+                }
+            }
+
+            if (!retval && SSLLogger.isOn && SSLLogger.isOn("verbose")) {
+                SSLLogger.fine("No active named group(s), ignore " + suite);
+            }
+
+            return retval;
+
+        } else if (SSLLogger.isOn && SSLLogger.isOn("verbose")) {
+            SSLLogger.fine("Ignore disabled cipher suite: " + suite);
+        }
+
+        return false;
+    }
+
+    List<ProtocolVersion> getEnabledProtocols() {
+        return enabledProtocols;
+    }
+
+    List<CipherSuite> getEnabledCipherSuites() {
+        return enabledCipherSuites;
+    }
+
+    void setEnabledProtocols(List<ProtocolVersion> enabledProtocols) {
+        this.enabledProtocols = enabledProtocols;
+        this.activeProtocols = getActiveProtocols(this.enabledProtocols,
+                this.enabledCipherSuites, this.algorithmConstraints);
+        this.activeCipherSuites = getActiveCipherSuites(this.activeProtocols,
+                this.enabledCipherSuites, this.algorithmConstraints);
+
+    }
+
+    void setEnabledCipherSuites(List<CipherSuite> enabledCipherSuites) {
+        this.enabledCipherSuites = enabledCipherSuites;
+        this.activeProtocols = getActiveProtocols(this.enabledProtocols,
+                this.enabledCipherSuites, this.algorithmConstraints);
+        this.activeCipherSuites = getActiveCipherSuites(this.activeProtocols,
+                this.enabledCipherSuites, this.algorithmConstraints);
+    }
+
 }

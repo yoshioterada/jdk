@@ -44,6 +44,7 @@ import javax.net.ssl.SSLSocketFactory;
 public final class SSLSocketFactoryImpl extends SSLSocketFactory {
 
     private final SSLContextImpl context;
+    private final SSLConfiguration configuration;
 
     /**
      * Constructor used to instantiate the default factory. This method is
@@ -52,6 +53,7 @@ public final class SSLSocketFactoryImpl extends SSLSocketFactory {
      */
     public SSLSocketFactoryImpl() throws Exception {
         this.context = SSLContextImpl.DefaultSSLContext.getDefaultImpl();
+        this.configuration = new SSLConfiguration(this.context, true);
     }
 
     /**
@@ -59,6 +61,7 @@ public final class SSLSocketFactoryImpl extends SSLSocketFactory {
      */
     SSLSocketFactoryImpl(SSLContextImpl context) {
         this.context = context;
+        this.configuration = new SSLConfiguration(this.context, true);
     }
 
     /**
@@ -69,7 +72,7 @@ public final class SSLSocketFactoryImpl extends SSLSocketFactory {
      */
     @Override
     public Socket createSocket() {
-        return new SSLSocketImpl(context);
+        return new SSLSocketImpl(context, this.configuration);
     }
 
     /**
@@ -85,7 +88,7 @@ public final class SSLSocketFactoryImpl extends SSLSocketFactory {
     public Socket createSocket(String host, int port)
     throws IOException, UnknownHostException
     {
-        return new SSLSocketImpl(context, host, port);
+        return new SSLSocketImpl(context, host, port, this.configuration);
     }
 
     /**
@@ -107,7 +110,7 @@ public final class SSLSocketFactoryImpl extends SSLSocketFactory {
     @Override
     public Socket createSocket(Socket s, String host, int port,
             boolean autoClose) throws IOException {
-        return new SSLSocketImpl(context, s, host, port, autoClose);
+        return new SSLSocketImpl(context, s, host, port, autoClose, configuration);
     }
 
     @Override
@@ -134,7 +137,7 @@ public final class SSLSocketFactoryImpl extends SSLSocketFactory {
     public Socket createSocket(InetAddress address, int port)
     throws IOException
     {
-        return new SSLSocketImpl(context, address, port);
+        return new SSLSocketImpl(context, address, port, configuration);
     }
 
 
@@ -151,7 +154,7 @@ public final class SSLSocketFactoryImpl extends SSLSocketFactory {
     throws IOException
     {
         return new SSLSocketImpl(context, host, port,
-                clientAddress, clientPort);
+                clientAddress, clientPort, configuration);
     }
 
     /**
@@ -167,7 +170,7 @@ public final class SSLSocketFactoryImpl extends SSLSocketFactory {
     throws IOException
     {
         return new SSLSocketImpl(context, address, port,
-                clientAddress, clientPort);
+                clientAddress, clientPort, configuration);
     }
 
 

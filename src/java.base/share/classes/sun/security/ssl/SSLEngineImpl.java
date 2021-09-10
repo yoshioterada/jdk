@@ -850,7 +850,7 @@ final class SSLEngineImpl extends SSLEngine implements SSLTransport {
     public String[] getEnabledCipherSuites() {
         engineLock.lock();
         try {
-            return CipherSuite.namesOf(conContext.sslConfig.enabledCipherSuites);
+            return CipherSuite.namesOf(conContext.sslConfig.getEnabledCipherSuites());
         } finally {
             engineLock.unlock();
         }
@@ -860,8 +860,8 @@ final class SSLEngineImpl extends SSLEngine implements SSLTransport {
     public void setEnabledCipherSuites(String[] suites) {
         engineLock.lock();
         try {
-            conContext.sslConfig.enabledCipherSuites =
-                    CipherSuite.validValuesOf(suites);
+            conContext.sslConfig.setEnabledCipherSuites(
+                    CipherSuite.validValuesOf(suites));
         } finally {
             engineLock.unlock();
         }
@@ -878,7 +878,7 @@ final class SSLEngineImpl extends SSLEngine implements SSLTransport {
         engineLock.lock();
         try {
             return ProtocolVersion.toStringArray(
-                    conContext.sslConfig.enabledProtocols);
+                    conContext.sslConfig.getEnabledProtocols());
         } finally {
             engineLock.unlock();
         }
@@ -892,8 +892,8 @@ final class SSLEngineImpl extends SSLEngine implements SSLTransport {
                 throw new IllegalArgumentException("Protocols cannot be null");
             }
 
-            conContext.sslConfig.enabledProtocols =
-                    ProtocolVersion.namesOf(protocols);
+            conContext.sslConfig.setEnabledProtocols(
+                    ProtocolVersion.namesOf(protocols));
         } finally {
             engineLock.unlock();
         }

@@ -461,15 +461,15 @@ final class TransportContext implements ConnectionContext {
          */
         if (sslConfig.isClientMode != useClientMode) {
             if (sslContext.isDefaultProtocolVesions(
-                    sslConfig.enabledProtocols)) {
-                sslConfig.enabledProtocols =
-                        sslContext.getDefaultProtocolVersions(!useClientMode);
+                    sslConfig.getEnabledProtocols())) {
+                sslConfig.setEnabledProtocols(
+                        sslContext.getDefaultProtocolVersions(!useClientMode));
             }
 
             if (sslContext.isDefaultCipherSuiteList(
-                    sslConfig.enabledCipherSuites)) {
-                sslConfig.enabledCipherSuites =
-                        sslContext.getDefaultCipherSuites(!useClientMode);
+                    sslConfig.getEnabledCipherSuites())) {
+                sslConfig.setEnabledCipherSuites(
+                        sslContext.getDefaultCipherSuites(!useClientMode));
             }
 
             sslConfig.toggleClientMode();

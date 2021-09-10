@@ -86,7 +86,7 @@ final class SSLServerSocketImpl extends SSLServerSocket {
     public String[] getEnabledCipherSuites() {
         serverSocketLock.lock();
         try {
-            return CipherSuite.namesOf(sslConfig.enabledCipherSuites);
+            return CipherSuite.namesOf(sslConfig.getEnabledCipherSuites());
         } finally {
             serverSocketLock.unlock();
         }
@@ -96,8 +96,8 @@ final class SSLServerSocketImpl extends SSLServerSocket {
     public void setEnabledCipherSuites(String[] suites) {
         serverSocketLock.lock();
         try {
-            sslConfig.enabledCipherSuites =
-                    CipherSuite.validValuesOf(suites);
+            sslConfig.setEnabledCipherSuites(
+                    CipherSuite.validValuesOf(suites));
         } finally {
             serverSocketLock.unlock();
         }
@@ -118,7 +118,7 @@ final class SSLServerSocketImpl extends SSLServerSocket {
     public String[] getEnabledProtocols() {
         serverSocketLock.lock();
         try {
-            return ProtocolVersion.toStringArray(sslConfig.enabledProtocols);
+            return ProtocolVersion.toStringArray(sslConfig.getEnabledProtocols());
         } finally {
             serverSocketLock.unlock();
         }
@@ -132,7 +132,7 @@ final class SSLServerSocketImpl extends SSLServerSocket {
                 throw new IllegalArgumentException("Protocols cannot be null");
             }
 
-            sslConfig.enabledProtocols = ProtocolVersion.namesOf(protocols);
+            sslConfig.setEnabledProtocols(ProtocolVersion.namesOf(protocols));
         } finally {
             serverSocketLock.unlock();
         }
@@ -196,15 +196,15 @@ final class SSLServerSocketImpl extends SSLServerSocket {
              */
             if (sslConfig.isClientMode != useClientMode) {
                 if (sslContext.isDefaultProtocolVesions(
-                        sslConfig.enabledProtocols)) {
-                    sslConfig.enabledProtocols =
-                        sslContext.getDefaultProtocolVersions(!useClientMode);
+                        sslConfig.getEnabledProtocols())) {
+                    sslConfig.setEnabledProtocols(
+                        sslContext.getDefaultProtocolVersions(!useClientMode));
                 }
 
                 if (sslContext.isDefaultCipherSuiteList(
-                        sslConfig.enabledCipherSuites)) {
-                    sslConfig.enabledCipherSuites =
-                        sslContext.getDefaultCipherSuites(!useClientMode);
+                        sslConfig.getEnabledCipherSuites())) {
+                    sslConfig.setEnabledCipherSuites(
+                        sslContext.getDefaultCipherSuites(!useClientMode));
                 }
 
                 sslConfig.toggleClientMode();
