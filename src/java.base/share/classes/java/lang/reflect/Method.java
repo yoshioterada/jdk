@@ -68,23 +68,23 @@ import java.util.StringJoiner;
  */
 public final class Method extends Executable {
     @Stable
-    private Class<?>            clazz;
-    private int                 slot;
+    private final Class<?>            clazz;
+    private final int                 slot;
     // This is guaranteed to be interned by the VM in the 1.4
     // reflection implementation
-    private String              name;
-    private Class<?>            returnType;
-    private Class<?>[]          parameterTypes;
-    private Class<?>[]          exceptionTypes;
+    private final String              name;
+    private final Class<?>            returnType;
+    private final Class<?>[]          parameterTypes;
+    private final Class<?>[]          exceptionTypes;
     @Stable
-    private int                 modifiers;
+    private final int                 modifiers;
     // Generics and annotations support
-    private transient String              signature;
+    private final transient String    signature;
     // generic info repository; lazily initialized
     private transient MethodRepository genericInfo;
-    private byte[]              annotations;
-    private byte[]              parameterAnnotations;
-    private byte[]              annotationDefault;
+    private final byte[]              annotations;
+    private final byte[]              parameterAnnotations;
+    private final byte[]              annotationDefault;
     @Stable
     private MethodAccessor      methodAccessor;
     // For sharing of MethodAccessors. This branching structure is
@@ -574,7 +574,7 @@ public final class Method extends Executable {
      * method; returns {@code false} otherwise}
      *
      * @apiNote
-     * A bridge method is a {@linkplain isSynthetic synthetic} method
+     * A bridge method is a {@linkplain #isSynthetic synthetic} method
      * created by a Java compiler alongside a method originating from
      * the source code. Bridge methods are used by Java compilers in
      * various circumstances to span differences in Java programming

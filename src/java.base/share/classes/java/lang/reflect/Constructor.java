@@ -63,17 +63,17 @@ import java.util.StringJoiner;
  * @since 1.1
  */
 public final class Constructor<T> extends Executable {
-    private Class<T>            clazz;
-    private int                 slot;
-    private Class<?>[]          parameterTypes;
-    private Class<?>[]          exceptionTypes;
-    private int                 modifiers;
+    private final Class<T>            clazz;
+    private final int                 slot;
+    private final Class<?>[]          parameterTypes;
+    private final Class<?>[]          exceptionTypes;
+    private final int                 modifiers;
     // Generics and annotations support
-    private transient String    signature;
+    private final transient String    signature;
     // generic info repository; lazily initialized
     private transient ConstructorRepository genericInfo;
-    private byte[]              annotations;
-    private byte[]              parameterAnnotations;
+    private final byte[]              annotations;
+    private final byte[]              parameterAnnotations;
 
     // Generics infrastructure
     // Accessor for factory
